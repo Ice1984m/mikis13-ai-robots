@@ -1,1 +1,64 @@
-<!doctype html><html lang="nl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mikis13 AI Robots</title><style>body{margin:0;background:radial-gradient(circle at top,#19366c,#050914 55%);color:#eef6ff;font-family:system-ui}header,main{max-width:1100px;margin:auto;padding:22px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.card,.panel{background:#0b1729dd;border:1px solid #31537d;border-radius:20px;padding:18px;box-shadow:0 18px 50px #0008}.on{color:#55f49a}.off{color:#ff788d}select,textarea,button{width:100%;box-sizing:border-box;margin:7px 0;padding:12px;border-radius:12px;border:1px solid #345578;background:#07101e;color:white}textarea{min-height:130px}button{background:linear-gradient(90deg,#1678ff,#8b4dff);font-weight:800;border:0}pre{white-space:pre-wrap;background:#030710;padding:14px;border-radius:12px}</style><header><h1>🤖 MIKIS13 AI ROBOTS</h1><p>5 lokale GitHub-werkbots • kosten lokaal: € 0,00</p></header><main><section id="bots" class="grid"></section><section class="panel"><select id="bot"></select><textarea id="task" placeholder="Taak voor een eigen of toegestane repository"></textarea><button id="run">Uitvoeren</button><pre id="out">Gereed.</pre></section></main><script>const names=['Issue Scout','Bug Solver','Test Engineer','PR Reviewer','Release Robot'];names.forEach((n,i)=>bot.add(new Option(n,i+1)));async function s(){const j=await(await fetch('/api/status')).json();bots.innerHTML=j.bots.map(b=>`<article class=card><h3>${b.name}</h3><b class=${b.status==='online'?'on':'off'}>● ${b.status}</b><p>${b.role||b.error||''}</p></article>`).join('')}run.onclick=async()=>{out.textContent='Bot werkt…';const r=await fetch('/api/task/'+bot.value,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:task.value})});out.textContent=JSON.stringify(await r.json(),null,2)};s();setInterval(s,10000)</script></html>
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mikis13 AI Robots</title>
+<style>
+:root{color-scheme:dark}body{margin:0;background:#08111f;color:#eef6ff;font-family:system-ui,sans-serif}
+header,main{max-width:1100px;margin:auto;padding:22px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.card,.panel{background:#102039;border:1px solid #31537d;border-radius:16px;padding:18px;margin-bottom:14px}
+.on{color:#55f49a}.off{color:#ff788d}input,select,textarea,button{width:100%;box-sizing:border-box;margin:7px 0;padding:12px;border-radius:10px;border:1px solid #345578;background:#07101e;color:white}
+textarea{min-height:130px}button{background:#176de0;font-weight:700;cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#030710;padding:14px;border-radius:10px}
+small{color:#a9bdd5}
+</style>
+</head>
+<body>
+<header><h1>🤖 MIKIS13 AI ROBOTS</h1><p>Vijf lokale werkbots · standaard alleen op deze computer bereikbaar</p></header>
+<main>
+<section class="panel">
+<label for="token">Lokale toegangssleutel</label>
+<input id="token" type="password" autocomplete="off" placeholder="Plak de MIKIS_ACCESS_TOKEN uit je .env">
+<button id="refresh" type="button">Verbinding controleren</button>
+<small>De sleutel wordt niet opgeslagen in de browser.</small>
+</section>
+<section id="bots" class="grid" aria-live="polite"></section>
+<section class="panel">
+<label for="bot">Kies een bot</label><select id="bot"></select>
+<label for="task">Opdracht</label><textarea id="task" maxlength="12000" placeholder="Beschrijf een taak voor een eigen of toegestane repository"></textarea>
+<button id="run" type="button">Taak uitvoeren</button><pre id="out">Gereed.</pre>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const names=['Issue Scout','Bug Solver','Test Engineer','PR Reviewer','Release Robot'];
+names.forEach((name,index)=>$('bot').add(new Option(name,String(index+1))));
+async function api(url,options={}) {
+ const headers={...(options.headers||{}),'x-mikis-token':$('token').value.trim()};
+ if(options.body) headers['content-type']='application/json';
+ const response=await fetch(url,{...options,headers});
+ const data=await response.json().catch(()=>({error:'Ongeldig serverantwoord'}));
+ if(!response.ok) throw new Error(data.error||'HTTP '+response.status);
+ return data;
+}
+async function refresh(){
+ $('out').textContent='Verbinding controleren…';
+ try{
+  const data=await api('/api/status');
+  const container=$('bots');container.replaceChildren();
+  data.bots.forEach(bot=>{
+   const card=document.createElement('article');card.className='card';
+   const title=document.createElement('h3');title.textContent=bot.name;
+   const status=document.createElement('p');status.className=bot.status==='online'?'on':'off';status.textContent='● '+bot.status;
+   card.append(title,status);container.append(card);
+  });
+  $('out').textContent='Dashboard verbonden.';
+ }catch(error){$('out').textContent=error.message;}
+}
+$('refresh').addEventListener('click',refresh);
+$('run').addEventListener('click',async()=>{
+ $('out').textContent='Bot werkt…';
+ try{$('out').textContent=JSON.stringify(await api('/api/task/'+$('bot').value,{method:'POST',body:JSON.stringify({message:$('task').value})}),null,2);}
+ catch(error){$('out').textContent=error.message;}
+});
+</script>
+</body></html>
