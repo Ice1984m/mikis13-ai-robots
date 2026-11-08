@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -eu
 cd "$HOME/mikis13-ai-robots"
 [ -f .env ] || { echo "Geen .env. Voer eerst ./setup-termux.sh uit."; exit 1; }
