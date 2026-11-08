@@ -1,4 +1,53 @@
-import express from'express';import fs from'node:fs';for(const l of fs.readFileSync('.env','utf8').split(/\r?\n/)){if(l&&l.includes('=')){const i=l.indexOf('=');process.env[l.slice(0,i)]=l.slice(i+1)}}
-const app=express(),token=process.env.MIKIS_ACCESS_TOKEN,bots=[['Issue Scout',4701],['Bug Solver',4702],['Test Engineer',4703],['PR Reviewer',4704],['Release Robot',4705]];app.use(express.json());app.use(express.static('public'));
-app.get('/api/status',async(_,r)=>r.json({bots:await Promise.all(bots.map(async([name,port],i)=>{try{return await(await fetch(`http://127.0.0.1:${port}/health`)).json()}catch(e){return{id:i+1,name,port,status:'offline',error:e.message}}}))}));
-app.post('/api/task/:id',async(q,r)=>{const b=bots[+q.params.id-1];if(!b)return r.status(404).json({error:'Bot niet gevonden'});const x=await fetch(`http://127.0.0.1:${b[1]}/task`,{method:'POST',headers:{'content-type':'application/json','x-mikis-token':token},body:JSON.stringify(q.body)});r.status(x.status).json(await x.json())});app.listen(4700,'127.0.0.1');
+import express from 'express';
+import { loadEnvFile, getConfig } from './config.mjs';
+import { tokenMatches } from './security.mjs';
+
+loadEnvFile();
+const config = getConfig();
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '256kb' }));
+app.use(express.static('public'));
+
+const bots = [
+  ['Issue Scout', 4701], ['Bug Solver', 4702], ['Test Engineer', 4703],
+  ['PR Reviewer', 4704], ['Release Robot', 4705]
+];
+
+function requireDashboardToken(req, res, next) {
+  if (!config.token) return res.status(503).json({ error: 'Dashboard niet geconfigureerd. Voer ./setup-termux.sh uit.' });
+  if (!tokenMatches(req.get('x-mikis-token'), config.token)) return res.status(401).json({ error: 'Ongeldige toegangssleutel.' });
+  next();
+}
+
+app.get('/api/status', requireDashboardToken, async (_req, res) => {
+  const status = await Promise.all(bots.map(async ([name, port], index) => {
+    try {
+      return await (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2500) })).json();
+    } catch {
+      return { id: index + 1, name, port, status: 'offline' };
+    }
+  }));
+  res.json({ bots: status });
+});
+
+app.post('/api/task/:id', requireDashboardToken, async (req, res) => {
+  const bot = bots[Number(req.params.id) - 1];
+  if (!bot) return res.status(404).json({ error: 'Bot niet gevonden.' });
+  const message = String(req.body?.message || '').trim();
+  if (!message) return res.status(400).json({ error: 'Vul eerst een taak in.' });
+  try {
+    const response = await fetch(`http://127.0.0.1:${bot[1]}/task`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mikis-token': config.token },
+      body: JSON.stringify({ message }),
+      signal: AbortSignal.timeout(185000)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: 'Bot niet bereikbaar: ' + error.message });
+  }
+});
+
+app.listen(config.dashboardPort, '127.0.0.1', () => console.log('Mikis13 dashboard op 127.0.0.1:' + config.dashboardPort));
